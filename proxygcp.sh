@@ -15,19 +15,19 @@ gen64() {
 
 gen_data() {
     seq $FIRST_PORT $LAST_PORT | while read port; do
-        echo "usr$(random)/pass$(random)/$IP4/$port/$(gen64 $IP6)"
+        echo "$IP4:$port:$(gen64 $IP6)"
     done
 }
 
 gen_iptables() {
     cat <<EOF
-    $(awk -F "/" '{print "sudo iptables -I INPUT -p tcp --dport " $4 "  -m state --state NEW -j ACCEPT"}' ${WORKDATA}) 
+    $(awk -F ":" '{print "sudo iptables -I INPUT -p tcp --dport " $2 " -m state --state NEW -j ACCEPT"}' ${WORKDATA}) 
 EOF
 }
 
 gen_ifconfig() {
     cat <<EOF
-$(awk -F "/" '{print "sudo ifconfig ens4 inet6 add " $5 "/64"}' ${WORKDATA})
+$(awk -F ":" '{print "sudo ifconfig ens4 inet6 add " $3 "/64"}' ${WORKDATA})
 EOF
 }
 
@@ -54,31 +54,16 @@ timeouts 1 5 30 60 180 1800 15 60
 setgid nogroup
 setuid nobody
 flush
-auth strong
+auth none
 
-users $(awk -F "/" 'BEGIN{ORS="";} {print $1 ":CL:" $2 " "}' ${WORKDATA})
-
-$(awk -F "/" '{print "auth strong\n" \
-"allow " $1 "\n" \
-"proxy -6 -n -a -p" $4 " -i" $3 " -e"$5"\n" \
-"flush\n"}' ${WORKDATA})
+$(awk -F ":" '{print "proxy -6 -n -a -p" $2 " -i" $1 " -e"$3"\n" "flush\n"}' ${WORKDATA})
 EOF
 }
 
 gen_proxy_file_for_user() {
     cat >proxy.txt <<EOF
-$(awk -F "/" '{print $3 ":" $4 ":" $1 ":" $2 }' ${WORKDATA})
+$(awk -F ":" '{print $1 ":" $2}' ${WORKDATA})
 EOF
-}
-
-upload_proxy() {
-    local PASS=$(random)
-    zip --password $PASS proxy.zip proxy.txt
-    URL=$(curl -s --upload-file proxy.zip https://transfer.sh/proxy.zip)
-
-    echo "Proxy is ready! Format IP:PORT:LOGIN:PASS"
-    echo "Download zip archive from: ${URL}"
-    echo "Password: ${PASS}"
 }
 
 echo "installing apps"
@@ -123,4 +108,5 @@ sudo bash /etc/rc.local
 
 gen_proxy_file_for_user
 
-upload_proxy
+echo "Proxy is ready! Format IP:PORT"
+cat proxy.txt
